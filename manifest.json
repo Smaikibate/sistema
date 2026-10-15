@@ -1,0 +1,22 @@
+{
+  "name": "СИСТЕМА – Рестарт",
+  "short_name": "Система",
+  "description": "Игра за самодисциплина: сън, храна, тяло, ум, пари, хора.",
+  "lang": "bg",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "screenshots": [
+    {"src": "shots/dnes.png", "sizes": "390x844", "type": "image/png", "form_factor": "narrow", "label": "Днес"},
+    {"src": "shots/fitnes.png", "sizes": "390x844", "type": "image/png", "form_factor": "narrow", "label": "Фитнес"}
+  ]
+}
