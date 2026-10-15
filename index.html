@@ -77,7 +77,7 @@ nav button.on span{transform:translateY(-2px) scale(1.12)}nav button span{transi
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
 </style>
 </head><body>
-<header><div class="hud"><div class="bdg" id="badge"></div><div class="mid"><div class="rk" id="rankName">Новобранец</div><div class="small" id="lvl">Ниво 1</div></div><div class="chips"><span class="chip">🔥 <span id="streak">0</span></span><span class="chip">🪙 <span id="coins">0</span></span></div></div>
+<header><div class="hud"><div class="bdg" id="badge"></div><div class="mid"><div class="rk" id="rankName">Новобранец</div><div class="small" id="lvl">Ниво 1</div></div><div class="chips"><span class="chip" id="syncChip" data-go="more" style="display:none"></span><span class="chip">🔥 <span id="streak">0</span></span><span class="chip">🪙 <span id="coins">0</span></span></div></div>
 <div class="xpbar"><i id="xpbar" style="width:0"></i></div><div class="small" id="xptxt"></div></header>
 <main>
 <section id="v-today"></section>
@@ -275,12 +275,12 @@ function rToday(){var d=day(),T=tasks(),n=new Date(),h=n.getHours()+n.getMinutes
 function eur(n){return (+n).toFixed(2)+' €'}
 var DEFCATS=['Храна','Гориво','Къмпинг/ток','Кемпер ремонт','Телефон/интернет','Здраве','Дрехи','Развлечения','Цигари/алкохол','Други'],INCATS=['Заплата','Бонус/извънреден труд','Друго'];
 var editId=null,mMonth=null;
-function migrateMoney(){if(S.mv>=2)return;var map={'Кемпер':'Кемпер ремонт','Кафе/навън':'Развлечения','Здраве/спорт':'Здраве'};S.expenses.forEach(function(e){if(map[e.c])e.c=map[e.c]});S.income=S.income||[];S.cats=S.cats||DEFCATS.slice();S.catBudget=S.catBudget||{};S.recurring=S.recurring||[];S.goals=S.goals||[];S.mv=2;save()}
+function migrateMoney(){S.income=S.income||[];S.cats=S.cats||DEFCATS.slice();S.catBudget=S.catBudget||{};S.recurring=S.recurring||[];S.goals=S.goals||[];if(S.mv>=2)return;var map={'Кемпер':'Кемпер ремонт','Кафе/навън':'Развлечения','Здраве/спорт':'Здраве'};S.expenses.forEach(function(e){if(map[e.c])e.c=map[e.c]});S.income=S.income||[];S.cats=S.cats||DEFCATS.slice();S.catBudget=S.catBudget||{};S.recurring=S.recurring||[];S.goals=S.goals||[];S.mv=2;save()}
 function monthOf(d){return d.slice(0,7)}
 function shiftMonth(m,n){var p=m.split('-'),d=new Date(+p[0],p[1]-1+n,1);return d.getFullYear()+'-'+pad(d.getMonth()+1)}
 function monthSum(m){var inc=S.income.filter(function(e){return monthOf(e.d)===m}),ex=S.expenses.filter(function(e){return monthOf(e.d)===m}),cat={};ex.forEach(function(e){cat[e.c]=(cat[e.c]||0)+e.a});
  var I=inc.reduce(function(a,e){return a+e.a},0),E=ex.reduce(function(a,e){return a+e.a},0);return{inc:inc,ex:ex,I:I,E:E,B:I-E,rate:I>0?Math.round((I-E)/I*100):0,cat:cat}}
-function addEntry(type,o){var arr=type==='inc'?S.income:S.expenses;if(o.id&&arr.some(function(e){return e.id==o.id})){arr.forEach(function(e,i){if(e.id==o.id)arr[i]=o})}else{o.id=o.id||Date.now()+Math.floor(Math.random()*1000);arr.push(o);addXp(2)}
+function addEntry(type,o){migrateMoney();var arr=type==='inc'?S.income:S.expenses;if(o.id&&arr.some(function(e){return e.id==o.id})){arr.forEach(function(e,i){if(e.id==o.id)arr[i]=o})}else{o.id=o.id||Date.now()+Math.floor(Math.random()*1000);arr.push(o);addXp(2)}
  if(type==='exp'){var b=S.catBudget[o.c],sp=monthSum(monthOf(o.d)).cat[o.c]||0;if(b>0&&sp>b)toast('🚨 '+o.c+': '+eur(sp)+' > бюджет '+eur(b)+'!');else if(b>0&&sp>0.8*b)toast('⚠️ '+o.c+': '+Math.round(sp/b*100)+'% от месечния бюджет');else toast('Записано: '+eur(o.a))}else toast('Приход: '+eur(o.a))}
 function rMoney(){migrateMoney();var t=todayKey(),wk=weekKey(new Date());mMonth=mMonth||monthOf(t);var today=S.expenses.filter(function(e){return e.d===t}),week=S.expenses.filter(function(e){return weekKey(parseKey(e.d))===wk});
  var st=today.reduce(function(a,e){return a+e.a},0),sw=week.reduce(function(a,e){return a+e.a},0),left=S.budget-sw,ed=null,edT='exp';
@@ -401,7 +401,7 @@ function drawChart(){var c=document.getElementById('ch');if(!c||!c.getContext)re
  x.fillText(mx.toFixed(0),5,30);x.fillText(mn.toFixed(0),5,H-30);x.strokeStyle='#ff5a1f';x.lineWidth=4;x.beginPath();ws.forEach(function(w,i){i?x.lineTo(px(i),py(w.kg)):x.moveTo(px(i),py(w.kg))});x.stroke();
  x.fillStyle='#f5c542';ws.forEach(function(w,i){x.beginPath();x.arc(px(i),py(w.kg),6,0,7);x.fill()})}
 function rMore(){var o='<button class="btn full" data-rep style="min-height:60px;font-size:18px;background:linear-gradient(90deg,#ff5a1f,#f5c542);color:#000">📟 Доклад до Система</button><div id="repbox"></div><div class="card"><button class="btn sec full" data-go="ward" style="min-height:56px">🛡️ Гардероб и герой</button><button class="btn sec full" data-go="boss" style="min-height:56px">👹 Седмични босове и история</button></div><div class="card"><button class="btn full" id="instBtn" style="display:'+(window._instEvt?'block':'none')+'">📲 Инсталирай приложението</button><div class="small">Телефон: Chrome ⋮ → „Инсталиране на приложението“. Лаптоп: иконата ⊕ в адресната лента на Chrome/Edge.</div></div><div class="card"><h2>💾 Архив</h2><div class="small">Данните са само на този телефон. Прави резервно копие всяка седмица!</div><div class="small">Последно копие: '+(S.lastBackup||'никога')+'</div><button class="btn full" id="exp">⬇️ Изтегли резервно копие (JSON)</button><button class="btn sec full" id="copy">📋 Копирай данните</button><label class="btn sec full" style="display:flex;align-items:center;justify-content:center;border-radius:12px;margin-top:8px;min-height:50px;font-weight:700">⬆️ Възстанови от файл<input type="file" id="imp" accept=".json,application/json" style="display:none"></label><textarea id="paste" placeholder="…или постави JSON тук" style="margin-top:8px;min-height:70px"></textarea><button class="btn sec full" id="pimp">Възстанови от текста</button></div>';
- o+='<div class="card"><h2>📜 Правила</h2><div class="small">• Ден с под 70% от точките = −150 XP и нулиране на серията.<br>• Пропуснат ден без отваряне = −250 XP.<br>• Неубит седмичен бос = −100 XP.<br>• Перфектен ден = +100 XP бонус.<br>• Тренировката расте всяка седмица.<br>• Покупка >20 € = 24 часа чакане.<br><br>Добави на началния екран: Chrome ⋮ → „Добавяне към началния екран“ / Safari ⬆️ → „Добави към начален екран“.</div></div>';
+ o+=cloudCard();o+='<div class="card"><h2>📜 Правила</h2><div class="small">• Ден с под 70% от точките = −150 XP и нулиране на серията.<br>• Пропуснат ден без отваряне = −250 XP.<br>• Неубит седмичен бос = −100 XP.<br>• Перфектен ден = +100 XP бонус.<br>• Тренировката расте всяка седмица.<br>• Покупка >20 € = 24 часа чакане.<br><br>Добави на началния екран: Chrome ⋮ → „Добавяне към началния екран“ / Safari ⬆️ → „Добави към начален екран“.</div></div>';
  o+='<div class="card"><h2>🔔 Известия (Android приложение)</h2><div class="small">Ставане, 6 хранения, тренировка, телефон настрана, лягане и задачи с час. Работят без интернет.</div><button class="btn sec full" id="ntog">'+(S.notif===false?'🔕 Изключени – тапни за включване':'🔔 Включени – тапни за изключване')+'</button>'+(AND?'':'<div class="small">В браузъра известията не са налични.</div>')+'</div>';o+='<div class="card"><button class="btn sec full" id="reset" style="color:var(--bad)">Изтрий всичко</button></div>';
  document.getElementById('v-more').innerHTML=o;
  document.getElementById('instBtn').onclick=function(){if(window._instEvt){window._instEvt.prompt();window._instEvt=null;this.style.display='none'}};
@@ -410,7 +410,7 @@ function rMore(){var o='<button class="btn full" data-rep style="min-height:60px
  function imp(txt){try{var d=JSON.parse(txt);if(!d||typeof d.xp!=='number'||!d.days)throw 0;if(!confirm('Да заменя текущите данни?'))return;S=d;var b=def();for(var k in b)if(!(k in S))S[k]=b[k];save();toast('Възстановено');render()}catch(e){toast('Невалиден файл')}}
  document.getElementById('imp').onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){imp(r.result)};r.readAsText(f)};
  document.getElementById('pimp').onclick=function(){imp(document.getElementById('paste').value)};
- document.getElementById('ntog').onclick=function(){S.notif=S.notif===false;save();render()};
+ cloudBind();document.getElementById('ntog').onclick=function(){S.notif=S.notif===false;save();render()};
  document.getElementById('reset').onclick=function(){if(confirm('Сигурен ли си? Всичко ще се изтрие.')&&confirm('Наистина?')){S=def();save();render()}}}
 // boss penalty for previous week
 function bossPenalty(){var wk=weekKey(new Date());if(!S.lastWeek){S.lastWeek=wk;return}if(S.lastWeek!==wk){var prev=S.bosses[S.lastWeek]||{},missed=2-Object.keys(prev).length;if(missed>0){S.xp=Math.max(0,S.xp-missed*100);S._penalty=(S._penalty?S._penalty+' ':'')+'Неубити босове миналата седмица: −'+missed*100+' XP.'}S.lastWeek=wk;save()}}
@@ -680,19 +680,20 @@ function goView(v){view=v;Array.prototype.forEach.call(document.querySelectorAll
 function render(){hdr();({today:rToday,money:rMoney,boss:rBoss,food:rFood,cal:rCal,ward:rWard,body:rBody,more:rMore})[view]()}
 Array.prototype.forEach.call(document.querySelectorAll('nav button'),function(b){b.onclick=function(){goView(b.dataset.v)}});
 document.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('[data-rep]'))return showReport();var ct=e.target.closest&&e.target.closest('[data-ct]');if(ct){var pp=ct.dataset.ct.split('|');return calToggle(pp[0],pp[1])}var fo=e.target.closest&&e.target.closest('[data-focus]');if(fo){var pf=fo.dataset.focus.split('|');return startFocus(pf[0],pf[1])}var ms=e.target.closest&&e.target.closest('[data-mstart]');if(ms)return startMission(+ms.dataset.mstart);var gv=e.target.closest&&e.target.closest('[data-go]');if(gv)return goView(gv.dataset.go);var t=e.target.closest&&e.target.closest('[data-t]');if(t)toggle(t.dataset.t)});
-function tick(){if(S&&S.focus)showFocus();if(S&&S.mission&&!document.getElementById('mission'))showMission();syncAlarms();processDays();bossPenalty();render()}
+function tick(){if(authGet()&&navigator.onLine&&!cloud.firstDone){render();return}if(S&&S.focus)showFocus();if(S&&S.mission&&!document.getElementById('mission'))showMission();syncAlarms();processDays();bossPenalty();render()}
 if(!S.meas.length&&S.weights.length){S.meas=S.weights.map(function(w){return{d:w.d,kg:w.kg}});save()}
 if(!S.meas.length){S.meas=[{d:todayKey(),kg:70}];S.weights=[{d:todayKey(),kg:70}];save()}
 // ---------- Sync layer (transport-agnostic; Supabase adapter plugs in via SistemaSync) ----------
 // Every logical record has a path (e.g. "days/2026-10-15", "expenses/123", "core"), its own updatedAt, and tombstones on delete.
 var SYNC_KEY='sistema_sync',COLL={days:'map',wlog:'map',food:'map',bosses:'map',shop:'map',shifts:'map',oplan:'map',catBudget:'map',foods:'map',owned:'map',
- expenses:'id',income:'id',cal:'id',goals:'id',recurring:'id',clothes:'id',outfits:'id',wishlist:'id',meas:'d',weights:'d',prs:'dev'},LOCAL_ONLY={_penalty:1,lastDay:1,lastWeek:1,focus:1,mission:1};
+ expenses:'id',income:'id',cal:'id',goals:'id',recurring:'id',clothes:'id',outfits:'id',wishlist:'id',meas:'d',weights:'d',prs:'dev'},LOCAL_ONLY={_penalty:1,focus:1,mission:1,maxLvl:1};
 function recKey(c,x){var m=COLL[c];return m==='id'?String(x.id):m==='d'?x.d:m==='dev'?x.d+'|'+x.ex+'|'+x.v:null}
 function syncRecords(st){var o={},core={};for(var k in st){if(COLL[k]){var c=st[k]||(COLL[k]==='map'?{}:[]);if(COLL[k]==='map'){for(var mk in c)o[k+'/'+mk]=c[mk]}else c.forEach(function(x){o[k+'/'+recKey(k,x)]=x})}else if(!LOCAL_ONLY[k])core[k]=st[k]}o.core=core;return o}
 function hashStr(s){var h=5381,i=s.length;while(i)h=(h*33)^s.charCodeAt(--i);return (h>>>0).toString(36)+s.length}
 function syncMeta(){try{return JSON.parse(localStorage.getItem(SYNC_KEY))||{rev:{},hash:{},tomb:{},dirty:{}}}catch(e){return{rev:{},hash:{},tomb:{},dirty:{}}}}
 function syncSaveMeta(m){try{localStorage.setItem(SYNC_KEY,JSON.stringify(m))}catch(e){}}
-function syncTrack(){var m=syncMeta(),r=syncRecords(S),now=Date.now(),ch=0;for(var p in r){var h=hashStr(JSON.stringify(r[p]));if(m.hash[p]!==h){m.hash[p]=h;m.rev[p]=now;delete m.tomb[p];m.dirty[p]=1;ch++}}
+function isEmptyRec(p,d){if(!d||typeof d!=='object')return false;if(p.indexOf('days/')===0)return !d.pts&&!Object.keys(d.done||{}).length&&!d.water&&!d.refl&&!(d.tasks||[]).join('');if(p.indexOf('wlog/')===0)return !d.done&&!Object.keys(d.sets||{}).length;if(p.indexOf('food/')===0)return !(d.m||[]).some(function(x){return x.length})&&!(d.q||[]).some(Boolean);if(p.indexOf('shop/')===0||p.indexOf('bosses/')===0)return !Object.keys(d).length;return false}
+function syncTrack(){var m=syncMeta(),r=syncRecords(S),now=Date.now(),ch=0;for(var p in r){var h=hashStr(JSON.stringify(r[p]));if(m.hash[p]!==h){var fresh=!m.hash[p]&&!m.tomb[p]&&isEmptyRec(p,r[p]);m.hash[p]=h;m.rev[p]=fresh?1:now;delete m.tomb[p];if(!fresh)m.dirty[p]=1;ch++}}
  for(var q in m.hash)if(!(q in r)){delete m.hash[q];delete m.rev[q];m.tomb[q]=now;m.dirty[q]=1;ch++}if(ch)syncSaveMeta(m);if(ch&&window.SistemaSync&&SistemaSync.onLocalChange)try{SistemaSync.onLocalChange()}catch(e){}return ch}
 var syncTO=null;function syncSoon(){clearTimeout(syncTO);syncTO=setTimeout(syncTrack,400)}
 function syncSet(p,data){var i=p.indexOf('/'),c=i<0?p:p.slice(0,i),k=i<0?null:p.slice(i+1);
@@ -708,13 +709,82 @@ window.SistemaSync={
  // last-write-wins per record; returns number applied
  applyRemote:function(list){syncTrack();var m=syncMeta(),n=0;list.forEach(function(x){var loc=Math.max(m.rev[x.path]||0,m.tomb[x.path]||0);if(x.updatedAt<=loc)return;
    syncSet(x.path,x.deleted?null:x.data);n++;if(x.deleted){delete m.hash[x.path];delete m.rev[x.path];m.tomb[x.path]=x.updatedAt}else{m.rev[x.path]=x.updatedAt;delete m.tomb[x.path];m.hash[x.path]=hashStr(JSON.stringify(syncRecords(S)[x.path]))}delete m.dirty[x.path]});
-  if(n){syncSaveMeta(m);try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof render==='function')render()}return n},
+  if(n){for(var c0 in COLL)if(S[c0]==null)S[c0]=COLL[c0]==='map'?{}:[];syncSaveMeta(m);try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}if(typeof render==='function')render()}return n},
  onLocalChange:null, adapter:null
 };
+// ---------- Cloud sync: Supabase via plain fetch ----------
+var CLOUD={url:'https://xmtlwfdflibrbqduiqko.supabase.co',key:'sb_publishable_u7Wavj0QrLF6gvDphxgNqQ_ha2jgGse'},AUTH_KEY='sistema_auth',CS_KEY='sistema_cloud';
+var cloud={state:'off',err:'',busy:false,firstDone:false,timer:null,pendingEmail:''};
+function authGet(){try{return JSON.parse(localStorage.getItem(AUTH_KEY))}catch(e){return null}}
+function authSet(a){if(a)localStorage.setItem(AUTH_KEY,JSON.stringify(a));else localStorage.removeItem(AUTH_KEY)}
+function csGet(){try{return JSON.parse(localStorage.getItem(CS_KEY))||{}}catch(e){return{}}}
+function csSet(c){localStorage.setItem(CS_KEY,JSON.stringify(c))}
+function cfetch(path,opt,auth){opt=opt||{};var h=opt.headers||{};h.apikey=CLOUD.key;if(auth)h.Authorization='Bearer '+auth.access_token;else h.Authorization='Bearer '+CLOUD.key;opt.headers=h;
+ return fetch(CLOUD.url+path,opt).then(function(r){if(!r.ok)return r.text().then(function(t){var e=new Error(r.status+' '+t.slice(0,200));e.status=r.status;throw e});var ct=r.headers.get('content-type')||'';return ct.indexOf('json')>=0?r.json():r.text()})}
+function sessionFrom(d){return{access_token:d.access_token,refresh_token:d.refresh_token,expires_at:Date.now()+((d.expires_in||3600)-60)*1000,user:d.user?{id:d.user.id,email:d.user.email}:null}}
+function authValid(){var a=authGet();if(!a)return Promise.reject(new Error('nologin'));if(a.expires_at>Date.now()&&a.user)return Promise.resolve(a);
+ return cfetch('/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:a.refresh_token})}).then(function(d){var s=sessionFrom(d);authSet(s);return s},function(e){if(e.status===400||e.status===401){authSet(null);cloudStatus('off','Сесията изтече – влез отново')}throw e})}
+function cloudSendCode(email){cloud.pendingEmail=email;var rt=location.protocol.indexOf('http')===0?location.origin+location.pathname:'https://smaikibate.github.io/sistema/';
+ return cfetch('/auth/v1/otp?redirect_to='+encodeURIComponent(rt),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,create_user:true})})}
+function cloudVerify(email,code){return cfetch('/auth/v1/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'email',email:email,token:code})}).then(function(d){authSet(sessionFrom(d));cloudStart(true)})}
+function cloudFromHash(){var h=location.hash||'';if(h.indexOf('access_token=')<0&&h.indexOf('error')<0)return;var p={};h.slice(1).split('&').forEach(function(kv){var i=kv.indexOf('=');p[decodeURIComponent(kv.slice(0,i))]=decodeURIComponent(kv.slice(i+1).replace(/\+/g,' '))});
+ try{history.replaceState(null,'',location.pathname+location.search)}catch(e){location.hash=''}
+ if(p.error){cloud.err=p.error_description||p.error;return}
+ var s=sessionFrom({access_token:p.access_token,refresh_token:p.refresh_token,expires_in:+p.expires_in||3600});authSet(s);
+ cfetch('/auth/v1/user',{},s).then(function(u){s.user={id:u.id,email:u.email};authSet(s);cloudStart(true)},function(e){cloud.err=String(e.message)})}
+function cloudStatus(st,err){cloud.state=st;if(err!=null)cloud.err=err;var el=document.getElementById('syncChip');if(el){var m={off:'',sync:'⟳',ok:'☁️✓',offline:'☁️✕',err:'⚠️'};el.textContent=m[st]||'';el.style.display=m[st]?'inline-block':'none';el.title=cloud.err||''}
+ if(view==='more'){var cs=document.getElementById('cloudStat');if(cs)cs.textContent=cloudStatusText()}}
+function cloudStatusText(){var c=csGet();return {off:'Не си влязъл',sync:'Синхронизиране…',ok:'Синхронизирано'+(c.lastOk?' · '+new Date(c.lastOk).toLocaleTimeString('bg-BG',{hour:'2-digit',minute:'2-digit'}):''),offline:'Няма интернет – ще синхронизира по-късно',err:'Грешка: '+cloud.err}[cloud.state]}
+// photos: clothes images go to Storage, records carry "sb:<path>"
+function photoPath(a,id){return a.user.id+'/'+id+'.jpg'}
+function dataUrlToBlob(u){var p=u.split(','),b=atob(p[1]),a=new Uint8Array(b.length);for(var i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return new Blob([a],{type:(p[0].match(/:(.*?);/)||[,'image/jpeg'])[1]})}
+function blobToDataUrl(b){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result)};r.onerror=rej;r.readAsDataURL(b)})}
+function prepPush(a,recs){var c=csGet();c.photos=c.photos||{};return Promise.all(recs.map(function(x){if(x.path.indexOf('clothes/')!==0)return Promise.resolve(x);
+  var id=x.path.slice(8),path=photoPath(a,id);
+  if(x.deleted)return fetch(CLOUD.url+'/storage/v1/object/photos/'+path,{method:'DELETE',headers:{apikey:CLOUD.key,Authorization:'Bearer '+a.access_token}}).catch(function(){}).then(function(){delete c.photos[id];return x});
+  var d=JSON.parse(JSON.stringify(x.data));if(!d.img||d.img.indexOf('data:')!==0)return Promise.resolve(x);var h=hashStr(d.img);
+  var up=c.photos[id]===h?Promise.resolve():fetch(CLOUD.url+'/storage/v1/object/photos/'+path,{method:'POST',headers:{apikey:CLOUD.key,Authorization:'Bearer '+a.access_token,'x-upsert':'true','Content-Type':'image/jpeg'},body:dataUrlToBlob(d.img)}).then(function(r){if(!r.ok)throw new Error('photo '+r.status);c.photos[id]=h});
+  return up.then(function(){d.img='sb:'+path;return{path:x.path,data:d,updatedAt:x.updatedAt,deleted:false}})})).then(function(out){var c2=csGet();c2.photos=c.photos;csSet(c2);return out})}
+function prepPull(a,recs){var local={};(S.clothes||[]).forEach(function(c){local[String(c.id)]=c});var c=csGet();c.photos=c.photos||{};
+ return Promise.all(recs.map(function(x){if(x.path.indexOf('clothes/')!==0||x.deleted||!x.data||String(x.data.img||'').indexOf('sb:')!==0)return Promise.resolve(x);
+  var id=x.path.slice(8),l=local[id];if(l&&l.img&&l.img.indexOf('data:')===0&&c.photos[id]){x.data.img=l.img;return Promise.resolve(x)}
+  return fetch(CLOUD.url+'/storage/v1/object/authenticated/photos/'+x.data.img.slice(3),{headers:{apikey:CLOUD.key,Authorization:'Bearer '+a.access_token}}).then(function(r){if(!r.ok)throw new Error('photo get '+r.status);return r.blob()}).then(blobToDataUrl).then(function(u){x.data.img=u;c.photos[id]=hashStr(u);return x},function(){x.data.img='';return x})})).then(function(out){var c2=csGet();c2.photos=c.photos;csSet(c2);return out})}
+function cloudPull(a){var c=csGet(),since=c.since||'1970-01-01T00:00:00Z',all=[];
+ function page(from){return cfetch('/rest/v1/records?select=key,data,updated_at,deleted,server_ts&server_ts=gt.'+encodeURIComponent(from)+'&order=server_ts.asc&limit=500',{},a).then(function(rows){all=all.concat(rows);if(rows.length===500)return page(rows[rows.length-1].server_ts);return all})}
+ return page(since).then(function(rows){var maxTs=since;rows.forEach(function(r){if(r.server_ts>maxTs)maxTs=r.server_ts});return{rows:rows,maxTs:maxTs}})}
+function cloudSync(){if(cloud.busy)return cloud.busy;if(!authGet()){cloudStatus('off');return Promise.resolve()}if(!navigator.onLine){cloudStatus('offline');return Promise.resolve()}
+ cloudStatus('sync');cloud.busy=authValid().then(function(a){var first=!csGet().since;
+  return cloudPull(a).then(function(res){var recs=res.rows.map(function(r){return{path:r.key,data:r.data,updatedAt:+r.updated_at,deleted:r.deleted}});
+   if(first&&recs.length){var rc=recs.filter(function(x){return x.path==='core'})[0],remoteXp=rc&&rc.data?rc.data.xp||0:0,localWins=(S.xp||0)>remoteXp;
+    var m=syncMeta(),now=Date.now();recs.forEach(function(x){if(m.hash[x.path]){if(localWins){m.rev[x.path]=Math.max(now,x.updatedAt+1);m.dirty[x.path]=1}else{m.rev[x.path]=0}}});syncSaveMeta(m)}
+   if(first){var m2=syncMeta();for(var p in m2.hash)m2.dirty[p]=1;for(var t in m2.tomb)m2.dirty[t]=1;syncSaveMeta(m2)}
+   return prepPull(a,recs).then(function(rr){if(rr.length)SistemaSync.applyRemote(rr);var c=csGet();c.since=new Date(Math.max(0,new Date(res.maxTs).getTime()-5000)).toISOString();csSet(c)})})
+  .then(function(){var pend=SistemaSync.pending();if(!pend.length)return;var chunks=[];for(var i=0;i<pend.length;i+=200)chunks.push(pend.slice(i,i+200));
+   return chunks.reduce(function(pr,ch){return pr.then(function(){return prepPush(a,ch).then(function(out){return cfetch('/rest/v1/rpc/push_records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:out.map(function(x){return{key:x.path,data:x.data,updated_at:x.updatedAt,deleted:x.deleted}})})},a).then(function(){SistemaSync.markSynced(ch)})})})},Promise.resolve())})
+  .then(function(){var c=csGet();c.lastOk=Date.now();c.email=a.user&&a.user.email;csSet(c);cloud.err='';cloudStatus('ok');if(!cloud.firstDone){cloud.firstDone=true;tick()}})})
+  .catch(function(e){if(e.message==='nologin')cloudStatus('off');else if(!navigator.onLine||e instanceof TypeError)cloudStatus('offline',String(e.message));else cloudStatus('err',String(e.message));if(!cloud.firstDone){cloud.firstDone=true;tick()}})
+  .then(function(){cloud.busy=false});return cloud.busy}
+var cloudDeb=null;function cloudSoon(){clearTimeout(cloudDeb);cloudDeb=setTimeout(cloudSync,2500)}
+function cloudStart(fresh){if(fresh){var c=csGet();delete c.since;csSet(c)}clearInterval(cloud.timer);cloud.timer=setInterval(function(){if(!document.hidden)cloudSync()},30000);SistemaSync.onLocalChange=cloudSoon;SistemaSync.adapter='supabase';cloudSync();if(view==='more')render()}
+function cloudLogout(){var a=authGet();if(a)cfetch('/auth/v1/logout',{method:'POST'},a).catch(function(){});authSet(null);localStorage.removeItem(CS_KEY);clearInterval(cloud.timer);SistemaSync.onLocalChange=null;cloud.firstDone=true;cloudStatus('off','');render()}
+window.addEventListener('online',function(){cloudSync()});window.addEventListener('offline',function(){if(authGet())cloudStatus('offline')});
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&authGet())cloudSync()});
+function cloudCard(){var a=authGet(),c=csGet(),o='<div class="card"><h2>☁️ Синхронизация (телефон ⇄ лаптоп)</h2>';
+ if(a){o+='<div>Влязъл като <b>'+esc((a.user&&a.user.email)||c.email||'')+'</b></div><div class="small" id="cloudStat">'+esc(cloudStatusText())+'</div><button class="btn full" id="csync">⟳ Синхронизирай сега</button><button class="btn sec full" id="cout">Изход</button><div class="small">Данните са видими само за твоя акаунт. Работи и без интернет – синхронизира, когато има връзка.</div>'}
+ else{o+='<div class="small">Влез с имейл на всяко устройство (телефон и лаптоп) – данните се обединяват автоматично.</div><input id="cemail" type="email" inputmode="email" autocomplete="email" placeholder="твоят@имейл" value="'+esc(cloud.pendingEmail||'')+'"><button class="btn full" id="csend">📧 Изпрати линк/код за вход</button>';
+  if(cloud.pendingEmail)o+='<div class="small" style="margin-top:8px">Провери пощата си (и „Спам“). <b>Отвори линка на това устройство</b> – влизаш автоматично. Ако имейлът съдържа 6-цифрен код, въведи го:</div><div class="row"><input id="ccode" inputmode="numeric" maxlength="6" placeholder="123456"><button class="btn sec" id="cver" style="flex:.6">Потвърди</button></div>';
+  if(cloud.err)o+='<div class="small" style="color:var(--bad)">'+esc(cloud.err)+'</div>';if(location.protocol==='file:')o+='<div class="small">⚠️ Във файловия/APK режим вход с линк не работи – използвай онлайн версията.</div>'}
+ return o+'</div>'}
+function cloudBind(){var $=function(x){return document.getElementById(x)},b;
+ if(b=$('csync'))b.onclick=function(){cloudSync().then(function(){toast(cloud.state==='ok'?'☁️ Синхронизирано':cloudStatusText())})};
+ if(b=$('cout'))b.onclick=function(){if(confirm('Изход? Данните остават на това устройство.'))cloudLogout()};
+ if(b=$('csend'))b.onclick=function(){var e=$('cemail').value.trim();if(!/^\S+@\S+\.\S+$/.test(e))return toast('Невалиден имейл');b.disabled=true;cloudSendCode(e).then(function(){cloud.err='';toast('📧 Изпратено на '+e);render()},function(er){cloud.err=/429|rate/i.test(er.message)?'Твърде много опити – изчакай малко.':er.message;render()})};
+ if(b=$('cver'))b.onclick=function(){var k=$('ccode').value.trim();cloudVerify(cloud.pendingEmail,k).then(function(){toast('✅ Влезе успешно');render()},function(er){cloud.err='Грешен или изтекъл код';render()})}}
+
 function migrate(){var v=S.schemaVersion||1;if(v<3){S.heroName=S.heroName||'';S.coins=S.coins||0;
  (S.clothes||[]).forEach(function(c){if(!c.color&&c.img){var im=new Image();im.onload=function(){var cv=document.createElement('canvas');cv.width=im.width;cv.height=im.height;cv.getContext('2d').drawImage(im,0,0);c.color=avgColor(cv);save()};im.src=c.img}})}
  S.schemaVersion=3;save()}
-migrate();syncTrack();
+migrate();syncTrack();cloudFromHash();if(authGet())cloudStart(false);else cloud.firstDone=true;setTimeout(function(){if(!cloud.firstDone){cloud.firstDone=true;tick()}},8000);
 tick();
 document.addEventListener('visibilitychange',function(){if(!document.hidden)tick()});
 setInterval(function(){if(view==='today'&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA')tick()},60000);
