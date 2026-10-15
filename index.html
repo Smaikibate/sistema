@@ -123,7 +123,7 @@ nav button.on span{transform:translateY(-2px) scale(1.12)}nav button span{transi
 // ---------- Storage ----------
 var KEY='sistema_v1';
 var S=load();
-function def(){return{xp:0,streak:0,best:0,lastDay:null,days:{},expenses:[],wishlist:[],weights:[],meas:[],wlog:{},prs:[{d:todayKey(),ex:'Лицеви опори',v:30}],gym:false,kcal:2900,goal:100,height:178,bar:false,budget:120,bosses:{},start:todayKey(),log:[]}}
+function def(){return{xp:0,streak:0,best:0,lastDay:null,days:{},expenses:[],wishlist:[],weights:[],meas:[],accounts:[{id:'cash',n:'Кеш',bal:0},{id:'bank',n:'Банка',bal:0},{id:'card',n:'Карта',bal:0}],bills:[],campNights:[],plans:[],campRate:13,defaultAcc:'cash',wlog:{},prs:[{d:todayKey(),ex:'Лицеви опори',v:30}],gym:false,kcal:2900,goal:100,height:178,bar:false,budget:120,bosses:{},start:todayKey(),log:[]}}
 function load(){try{var d=JSON.parse(localStorage.getItem(KEY));if(d&&typeof d==='object'){var b=def();for(var k in b)if(!(k in d))d[k]=b[k];return d}}catch(e){}return def()}
 function save(){if(typeof syncAlarms==='function')syncAlarms();try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('⚠️ Неуспешен запис!')}if(typeof syncSoon==='function')syncSoon()}
 var AND=(function(){try{return window.Android||null}catch(e){return null}})();
@@ -282,14 +282,88 @@ function monthSum(m){var inc=S.income.filter(function(e){return monthOf(e.d)===m
  var I=inc.reduce(function(a,e){return a+e.a},0),E=ex.reduce(function(a,e){return a+e.a},0);return{inc:inc,ex:ex,I:I,E:E,B:I-E,rate:I>0?Math.round((I-E)/I*100):0,cat:cat}}
 function addEntry(type,o){migrateMoney();var arr=type==='inc'?S.income:S.expenses;if(o.id&&arr.some(function(e){return e.id==o.id})){arr.forEach(function(e,i){if(e.id==o.id)arr[i]=o})}else{o.id=o.id||Date.now()+Math.floor(Math.random()*1000);arr.push(o);addXp(2)}
  if(type==='exp'){var b=S.catBudget[o.c],sp=monthSum(monthOf(o.d)).cat[o.c]||0;if(b>0&&sp>b)toast('🚨 '+o.c+': '+eur(sp)+' > бюджет '+eur(b)+'!');else if(b>0&&sp>0.8*b)toast('⚠️ '+o.c+': '+Math.round(sp/b*100)+'% от месечния бюджет');else toast('Записано: '+eur(o.a))}else toast('Приход: '+eur(o.a))}
-function rMoney(){migrateMoney();var t=todayKey(),wk=weekKey(new Date());mMonth=mMonth||monthOf(t);var today=S.expenses.filter(function(e){return e.d===t}),week=S.expenses.filter(function(e){return weekKey(parseKey(e.d))===wk});
+// ---------- Accounts, bills, camping rents, planned expenses ----------
+var DEF_ACCOUNTS=[{id:'cash',n:'Кеш',bal:0},{id:'bank',n:'Банка',bal:0},{id:'card',n:'Карта',bal:0}];
+var BILL_CATS=['Ток','Вода','Интернет/телефон','Застраховка','Абонамент','Къмпинг/ток','Кемпер','Други'];
+function ensureMoney(){migrateMoney();
+ if(!S.accounts||!S.accounts.length)S.accounts=DEF_ACCOUNTS.map(function(a){return{id:a.id,n:a.n,bal:a.bal}});
+ S.bills=S.bills||[];S.campNights=S.campNights||[];S.plans=S.plans||[];
+ if(S.campRate==null)S.campRate=13;if(!S.defaultAcc)S.defaultAcc=S.accounts[0].id;
+ if(S.cats.indexOf('Къмпинг/ток')<0)S.cats.push('Къмпинг/ток');
+ if(S.cats.indexOf('Наем')<0)S.cats.push('Наем')}
+function accBy(id){return S.accounts.filter(function(a){return a.id==id})[0]}
+function accOpt(sel){return S.accounts.map(function(a){return '<option value="'+a.id+'"'+(sel==a.id?' selected':'')+'>'+esc(a.n)+' ('+eur(a.bal)+')</option>'}).join('')}
+function adjAcc(id,delta){var a=accBy(id);if(a)a.bal=Math.round((a.bal+delta)*100)/100}
+function billDue(b,m){var day=Math.min(b.day||1,28),ds=m+'-'+pad(day);return ds}
+function billPaid(b,m){return !!(b.paid&&b.paid[m])}
+function billOverdue(b,m){if(billPaid(b,m))return false;var due=billDue(b,m),t=todayKey();return due<=t&&monthOf(t)===m}
+function campMonth(m){return S.campNights.filter(function(n){return monthOf(n.d)===m})}
+function planMonth(m){return S.plans.filter(function(p){return p.m===m&&!p.converted})}
+function nextMonth(m){return shiftMonth(m||monthOf(todayKey()),1)}
+function moneyExtHTML(t,mMonth){ensureMoney();var o='',nm=nextMonth(mMonth),totAcc=S.accounts.reduce(function(a,x){return a+x.bal},0);
+ // Accounts
+ o+='<div class="card"><h2>💳 Сметки (кеш / банка)</h2><div class="stats">'+S.accounts.map(function(a){return '<div><b>'+eur(a.bal)+'</b>'+esc(a.n)+'</div>'}).join('')+'<div><b>'+eur(totAcc)+'</b>общо</div></div>';
+ o+='<details><summary class="small">Прехвърляне / редакция на салда</summary><div class="row"><select id="tf">'+accOpt()+'</select><select id="tt">'+accOpt(S.accounts[1]?S.accounts[1].id:'')+'</select><input id="ta" type="number" inputmode="decimal" placeholder="€" style="flex:.6"></div><button class="btn sec full" id="txfer">⇄ Прехвърли</button>';
+ o+=S.accounts.map(function(a){return '<div class="row" style="align-items:center"><span style="flex:1">'+esc(a.n)+'</span><input data-abal="'+a.id+'" type="number" inputmode="decimal" step="0.01" value="'+a.bal+'"></div>'}).join('')+'<button class="btn sec full" id="asave">Запази салдата</button>';
+ o+='<div class="row"><input id="anew" placeholder="Нова сметка"><button class="btn sec" id="aadd" style="flex:.5">+</button></div></details></div>';
+ // Bills
+ var billTot=S.bills.reduce(function(a,b){return a+b.a},0),billPaidN=S.bills.filter(function(b){return billPaid(b,mMonth)}).length,billDueTot=S.bills.filter(function(b){return !billPaid(b,mMonth)}).reduce(function(a,b){return a+b.a},0),overN=S.bills.filter(function(b){return billOverdue(b,mMonth)}).length;
+ o+='<div class="card"><h2>🧾 Сметки (месечни)</h2><div class="stats"><div><b>'+eur(billTot)+'</b>всички</div><div><b style="color:var(--ok)">'+billPaidN+'/'+S.bills.length+'</b>платени</div><div><b style="color:'+(overN?'var(--bad)':'var(--tx)')+'">'+eur(billDueTot)+'</b>остават'+(overN?' · ⚠'+overN:'')+'</div></div>';
+ if(!S.bills.length)o+='<div class="small">Добави ток, вода, интернет… Един тап „Платих“ ги записва в разходите.</div>';
+ S.bills.forEach(function(b){var paid=billPaid(b,mMonth),od=billOverdue(b,mMonth);o+='<div class="row" style="align-items:center;margin:6px 0"><button class="task'+(paid?' done':'')+'" data-billpay="'+b.id+'" style="margin:0;'+(od?'outline:2px solid var(--bad)':'')+'"><span class="ck">'+(paid?'✓':'')+'</span><span>'+(od?'⚠️ ':'')+esc(b.n)+'<small>'+esc(b.c)+' · падеж '+pad(b.day||1)+'. · '+eur(b.a)+(paid?' · платено':'')+'</small></span><span class="pt">'+eur(b.a)+'</span></button><button class="x" data-billdel="'+b.id+'" style="flex:0">✕</button></div>'});
+ o+='<div class="row"><input id="bn" placeholder="Име (Ток, Интернет…)"><input id="ba" type="number" inputmode="decimal" placeholder="€" style="flex:.5"></div><div class="row"><select id="bc">'+BILL_CATS.map(function(c){return '<option>'+c+'</option>'}).join('')+'</select><input id="bd" type="number" inputmode="numeric" min="1" max="28" placeholder="ден" value="1" style="flex:.5"></div><button class="btn sec full" id="badd">+ Добави сметка</button></div>';
+ // Camping / rents
+ var nights=campMonth(mMonth),campSum=nights.reduce(function(a,n){return a+n.a},0),todayCamp=nights.some(function(n){return n.d===t});
+ o+='<div class="card"><h2>🏕️ Наеми / къмпинг</h2><div class="stats"><div><b>'+nights.length+'</b>нощи ('+mMonth.slice(5)+')</div><div><b>'+eur(campSum)+'</b>този месец</div><div><b>'+eur(S.campRate)+'</b>€/нощ</div></div>';
+ o+='<div class="row"><button class="btn'+(todayCamp?' sec':'')+'" id="cnight" style="flex:1.5">'+(todayCamp?'✓ Нощувката е записана':'🏕️ + Нощувка днес ('+eur(S.campRate)+')')+'</button><input id="crate" type="number" inputmode="decimal" step="0.01" value="'+S.campRate+'" style="flex:.6" title="€/нощ"></div>';
+ o+='<div class="row"><input id="crent" type="number" inputmode="decimal" placeholder="Месечен наем €"><input id="crentn" placeholder="Бележка" value="Наем"><button class="btn sec" id="crentadd" style="flex:.5">+</button></div>';
+ if(nights.length){o+='<details><summary class="small">История нощувки ('+nights.length+')</summary><div class="list">'+nights.slice().reverse().map(function(n){return '<div><span>'+n.d+(n.n?' · '+esc(n.n):'')+'</span><span>'+eur(n.a)+'<button class="x" data-cdel="'+n.id+'">✕</button></span></div>'}).join('')+'</div></details>'}
+ o+='</div>';
+ // Planned next month
+ var plans=planMonth(nm),pSum=plans.reduce(function(a,p){return a+p.a},0),expInc=(S.recurring||[]).filter(function(r){return r.type==='inc'}).reduce(function(a,r){return a+r.a},0);
+ if(!expInc){var M=monthSum(mMonth);expInc=M.I}
+ o+='<div class="card"><h2>📅 Разходи за следващия месец ('+nm.slice(5)+'/'+nm.slice(0,4)+')</h2><div class="stats"><div><b>'+eur(pSum)+'</b>планирани</div><div><b style="color:var(--ok)">'+eur(expInc)+'</b>очакван приход</div><div><b style="color:'+(expInc-pSum<0?'var(--bad)':'var(--ok)')+'">'+eur(expInc-pSum)+'</b>остават</div></div>';
+ if(!plans.length)o+='<div class="small">Планирай разходи преди месеца – после ги превръщаш в реални с 1 тап.</div>';
+ plans.forEach(function(p){o+='<div class="row" style="align-items:center;margin:4px 0"><div style="flex:1"><b>'+esc(p.n)+'</b><div class="small">'+esc(p.c)+(p.day?' · ден '+p.day:'')+' · '+eur(p.a)+'</div></div><button class="btn sec" data-pconv="'+p.id+'" style="flex:0 0 auto;min-height:44px;padding:0 10px">✓ Платих</button><button class="x" data-pdel="'+p.id+'" style="flex:0">✕</button></div>'});
+ o+='<div class="row"><input id="pn" placeholder="Какво (напр. гуми, сервиз)"><input id="pa" type="number" inputmode="decimal" placeholder="€" style="flex:.5"></div><div class="row"><select id="pc">'+S.cats.map(function(c){return '<option>'+c+'</option>'}).join('')+'</select><input id="pd" type="number" inputmode="numeric" min="1" max="28" placeholder="ден" style="flex:.5"></div><button class="btn sec full" id="padd">+ Планирай за '+nm.slice(5)+'</button></div>';
+ return o}
+function moneyExtBind(t,mMonth){ensureMoney();var $=function(x){return document.getElementById(x)},nm=nextMonth(mMonth);
+ $('txfer').onclick=function(){var a=parseFloat($('ta').value.replace(',','.')),f=$('tf').value,tt=$('tt').value;if(!(a>0)||f===tt)return toast('Сума и различни сметки');adjAcc(f,-a);adjAcc(tt,a);save();toast('Прехвърлено '+eur(a));render()};
+ $('asave').onclick=function(){Array.prototype.forEach.call(document.querySelectorAll('[data-abal]'),function(i){var a=accBy(i.dataset.abal);if(a)a.bal=parseFloat(i.value.replace(',','.'))||0});save();toast('Салдата са запазени');render()};
+ $('aadd').onclick=function(){var n=$('anew').value.trim();if(!n)return;S.accounts.push({id:'a'+uid(),n:n,bal:0});save();render()};
+ $('badd').onclick=function(){var n=$('bn').value.trim(),a=parseFloat($('ba').value.replace(',','.')),day=parseInt($('bd').value)||1;if(!n||!(a>0))return toast('Име и сума');S.bills.push({id:uid(),n:n,a:a,c:$('bc').value,day:Math.min(28,Math.max(1,day)),paid:{}});save();addXp(2);toast('Сметката е добавена');render()};
+ bindAll('[data-billpay]',function(id){var b=S.bills.filter(function(x){return x.id==id})[0];if(!b)return;b.paid=b.paid||{};var m=mMonth;
+  if(billPaid(b,m)){var eid=b.paid[m];if(eid&&eid!==1){var ex=S.expenses.filter(function(e){return e.id==eid})[0];if(ex){if(ex.acc)adjAcc(ex.acc,ex.a);S.expenses=S.expenses.filter(function(e){return e.id!=eid})}}delete b.paid[m];save();toast('Отменено');render();return}
+  var acc=($('eacc')&&$('eacc').value)||S.defaultAcc,d=(monthOf(todayKey())===m)?todayKey():billDue(b,m);
+  addEntry('exp',{a:b.a,c:(S.cats.indexOf(b.c)>=0?b.c:(b.c==='Ток'||b.c==='Вода'||b.c==='Интернет/телефон'||b.c==='Къмпинг/ток'?'Къмпинг/ток':b.c==='Кемпер'?'Кемпер ремонт':'Други')),n:b.n+' (сметка)',d:d,acc:acc,bill:b.id});
+  var last=S.expenses[S.expenses.length-1];adjAcc(acc,-b.a);b.paid[m]=last.id;save();toast('✓ Платено: '+b.n);render()});
+ bindAll('[data-billdel]',function(id){if(confirm('Изтрий сметката?')){S.bills=S.bills.filter(function(x){return x.id!=id});save();render()}});
+ $('cnight').onclick=function(){ensureMoney();var rate=parseFloat($('crate').value.replace(',','.'));if(rate>0)S.campRate=rate;
+  var exist=S.campNights.filter(function(n){return n.d===t})[0];
+  if(exist){if(!confirm('Махни нощувката за днес?'))return;S.campNights=S.campNights.filter(function(n){return n.id!=exist.id});
+   S.expenses=S.expenses.filter(function(e){return e.camp!=exist.id});if(exist.acc)adjAcc(exist.acc,exist.a);save();render();return}
+  var id=uid(),acc=S.defaultAcc;S.campNights.push({id:id,d:t,a:S.campRate,n:'Къмпинг',acc:acc});
+  addEntry('exp',{a:S.campRate,c:'Къмпинг/ток',n:'Къмпинг нощувка',d:t,acc:acc,camp:id});adjAcc(acc,-S.campRate);addXp(2);toast('🏕️ +нощувка '+eur(S.campRate));save();render()};
+ $('crate').onchange=function(){var v=parseFloat(this.value.replace(',','.'));if(v>0){S.campRate=v;save()}};
+ $('crentadd').onclick=function(){var a=parseFloat($('crent').value.replace(',','.')),n=$('crentn').value||'Наем';if(!(a>0))return toast('Сума');var acc=S.defaultAcc;
+  addEntry('exp',{a:a,c:'Наем',n:n,d:t,acc:acc});adjAcc(acc,-a);save();toast('Наемът е записан');render()};
+ bindAll('[data-cdel]',function(id){var n=S.campNights.filter(function(x){return x.id==id})[0];if(!n||!confirm('Изтрий нощувката?'))return;
+  S.campNights=S.campNights.filter(function(x){return x.id!=id});S.expenses=S.expenses.filter(function(e){return e.camp!=id});if(n.acc)adjAcc(n.acc,n.a);save();render()});
+ $('padd').onclick=function(){var n=$('pn').value.trim(),a=parseFloat($('pa').value.replace(',','.')),day=parseInt($('pd').value)||0;if(!n||!(a>0))return toast('Име и сума');
+  S.plans.push({id:uid(),n:n,a:a,c:$('pc').value,day:day||null,m:nm,converted:false});save();addXp(2);toast('Планирано за '+nm);render()};
+ bindAll('[data-pdel]',function(id){S.plans=S.plans.filter(function(x){return x.id!=id});save();render()});
+ bindAll('[data-pconv]',function(id){var p=S.plans.filter(function(x){return x.id==id})[0];if(!p)return;var acc=S.defaultAcc,d=p.day?p.m+'-'+pad(p.day):todayKey();
+  if(monthOf(todayKey())!==p.m&&!confirm('Планът е за '+p.m+', а днес е друг месец. Запиши като платен сега?'))return;
+  addEntry('exp',{a:p.a,c:p.c,n:p.n+' (план)',d:monthOf(todayKey())===p.m?todayKey():d,acc:acc,plan:p.id});adjAcc(acc,-p.a);p.converted=true;p.paidOn=todayKey();save();toast('✓ Превърнато в разход');render()})}
+
+function rMoney(){ensureMoney();var t=todayKey(),wk=weekKey(new Date());mMonth=mMonth||monthOf(t);var today=S.expenses.filter(function(e){return e.d===t}),week=S.expenses.filter(function(e){return weekKey(parseKey(e.d))===wk});
  var st=today.reduce(function(a,e){return a+e.a},0),sw=week.reduce(function(a,e){return a+e.a},0),left=S.budget-sw,ed=null,edT='exp';
  if(editId){ed=S.expenses.filter(function(e){return e.id==editId})[0];if(!ed){ed=S.income.filter(function(e){return e.id==editId})[0];edT='inc'}}
  var o='<div class="card"><div class="stats"><div><b>'+eur(st)+'</b>днес</div><div><b>'+eur(sw)+'</b>седмица</div><div><b style="color:'+(left<0?'var(--bad)':'var(--ok)')+'">'+eur(left)+'</b>остават седм.</div></div>';
  var qk={},qa=[];S.expenses.slice().reverse().forEach(function(e){var key=e.c+'|'+e.a+'|'+(e.n||'');if(!qk[key]&&qa.length<6){qk[key]=1;qa.push(e)}});
  if(!ed&&qa.length)o+='<h3>⚡ Бързо (1 тап = записано днес)</h3><div style="display:flex;flex-wrap:wrap;gap:6px">'+qa.map(function(e,i){return '<button class="btn sec" data-quick="'+i+'" style="min-height:44px;padding:0 12px;font-size:14px">'+esc(e.n||e.c)+' '+e.a+'€</button>'}).join('')+'</div>';
  o+='<h3>'+(ed?'✏️ Редакция':'Нов запис')+'</h3><div class="row"><button class="btn '+(edT==='exp'?'':'sec')+'" id="tyE">− Разход</button><button class="btn '+(edT==='inc'?'':'sec')+'" id="tyI">+ Приход</button></div>';
- o+='<div class="row"><input id="ea" type="number" inputmode="decimal" step="0.01" placeholder="Сума €" value="'+(ed?ed.a:'')+'"><select id="ec"></select></div><div class="row"><input id="ed" type="date" value="'+(ed?ed.d:t)+'"><input id="en" placeholder="Бележка" value="'+esc(ed?ed.n||'':'')+'"></div>';
+ o+='<div class="row"><input id="ea" type="number" inputmode="decimal" step="0.01" placeholder="Сума €" value="'+(ed?ed.a:'')+'"><select id="ec"></select></div><div class="row"><input id="ed" type="date" value="'+(ed?ed.d:t)+'"><select id="eacc">'+accOpt(ed&&ed.acc?ed.acc:S.defaultAcc)+'</select></div><input id="en" placeholder="Бележка" value="'+esc(ed?ed.n||'':'')+'">';
  o+='<button class="btn full" id="eadd">'+(ed?'💾 Запази промяната':'✅ Запиши')+'</button>'+(ed?'<div class="row"><button class="btn sec" id="ecancel">Отказ</button><button class="btn sec" id="edel" style="color:var(--bad)">Изтрий</button></div>':'<button class="btn sec full" id="erec">⭐ Запази като месечен повтарящ се</button>')+'</div>';
  if(S.recurring.length){o+='<div class="card"><h2>🔁 Месечни (1 тап)</h2>';S.recurring.forEach(function(r){var m=monthOf(t),doneM=(r.type==='inc'?S.income:S.expenses).some(function(e){return e.rec==r.id&&monthOf(e.d)===m});
   o+='<div class="row"><button class="task'+(doneM?' done':'')+'" data-rec="'+r.id+'" style="margin:0"><span class="ck">'+(doneM?'✓':'')+'</span><span>'+esc(r.n||r.c)+'<small>'+(r.type==='inc'?'Приход':'Разход')+' · '+esc(r.c)+'</small></span><span class="pt">'+eur(r.a)+'</span></button><button class="x" data-recdel="'+r.id+'" style="flex:0">✕</button></div>'});o+='</div>'}
@@ -305,21 +379,22 @@ function rMoney(){migrateMoney();var t=todayKey(),wk=weekKey(new Date());mMonth=
  o+='<div class="row"><input id="gn" placeholder="Цел (напр. Авариен фонд)"><input id="gt" type="number" inputmode="decimal" placeholder="€" style="flex:.5"></div><button class="btn sec full" id="gadd">+ Нова цел</button></div>';
  o+='<div class="card"><h2>Седмичен бюджет</h2><div class="row"><input id="bud" type="number" inputmode="decimal" value="'+S.budget+'"><button class="btn sec" id="bsave">Запази</button></div>';
  o+='<details><summary class="small">Месечни бюджети по категории и категории</summary>'+S.cats.map(function(c){return '<div class="row" style="align-items:center"><span style="flex:1.3">'+esc(c)+'</span><input data-cb="'+esc(c)+'" type="number" inputmode="decimal" placeholder="€/мес" value="'+(S.catBudget[c]||'')+'"></div>'}).join('')+'<button class="btn sec full" id="cbsave">Запази бюджетите</button><textarea id="catsTxt" style="min-height:80px;margin-top:8px">'+esc(S.cats.join(', '))+'</textarea><button class="btn sec full" id="catsave">Запази категориите (със запетая)</button></details></div>';
- o+='<div class="card"><h2>⏳ Правило 24ч (покупки > 20 €)</h2><div class="row"><input id="wn" placeholder="Какво искаш да купиш"><input id="wa" type="number" inputmode="decimal" placeholder="€" style="flex:.4"></div><button class="btn sec full" id="wadd">Добави в списък за чакане</button><div class="list">';
+ o+=moneyExtHTML(t,mMonth);o+='<div class="card"><h2>⏳ Правило 24ч (покупки > 20 €)</h2><div class="row"><input id="wn" placeholder="Какво искаш да купиш"><input id="wa" type="number" inputmode="decimal" placeholder="€" style="flex:.4"></div><button class="btn sec full" id="wadd">Добави в списък за чакане</button><div class="list">';
  S.wishlist.forEach(function(w){var hrs=(Date.now()-w.t)/36e5,ok=hrs>=24;o+='<div><span>'+esc(w.n)+' · '+eur(w.a)+'<br><small class="small">'+(ok?'✅ 24ч минаха – още ли ти трябва?':'🔒 още '+Math.ceil(24-hrs)+' ч')+'</small></span><span>'+(ok?'<button class="x" style="color:var(--ok)" data-buy="'+w.id+'">Купи</button>':'')+'<button class="x" data-skip="'+w.id+'">Откажи +20XP</button></span></div>'});
  o+='</div></div>';document.getElementById('v-money').innerHTML=o;
  var type=edT,ec=document.getElementById('ec');function fillCats(){ec.innerHTML=(type==='inc'?INCATS:S.cats).map(function(c){return '<option'+(ed&&ed.c===c?' selected':'')+'>'+esc(c)+'</option>'}).join('');document.getElementById('tyE').className='btn'+(type==='exp'?'':' sec');document.getElementById('tyI').className='btn'+(type==='inc'?'':' sec')}fillCats();
  document.getElementById('tyE').onclick=function(){type='exp';fillCats()};document.getElementById('tyI').onclick=function(){type='inc';fillCats()};
- function formObj(){var a=parseFloat(document.getElementById('ea').value.replace(',','.'));if(!(a>0)){toast('Въведи сума');return null}return{a:a,c:ec.value,d:document.getElementById('ed').value||t,n:document.getElementById('en').value}}
+ function formObj(){var a=parseFloat(document.getElementById('ea').value.replace(',','.'));if(!(a>0)){toast('Въведи сума');return null}return{a:a,c:ec.value,d:document.getElementById('ed').value||t,n:document.getElementById('en').value,acc:document.getElementById('eacc').value||S.defaultAcc}}
  document.getElementById('eadd').onclick=function(){var f=formObj();if(!f)return;if(type==='exp'&&!ed&&f.a>20&&!confirm('Над 20 €! Правилото е 24ч чакане. Наистина ли е нужно СЕГА (сметка, храна, гориво)?'))return;
-  if(ed){f.id=ed.id;if(ed.rec)f.rec=ed.rec;S.expenses=S.expenses.filter(function(e){return e.id!=ed.id});S.income=S.income.filter(function(e){return e.id!=ed.id})}addEntry(type,f);editId=null;save();render()};
+  if(ed){f.id=ed.id;if(ed.rec)f.rec=ed.rec;if(ed.acc)adjAcc(ed.acc,edT==='inc'?-ed.a:ed.a);S.expenses=S.expenses.filter(function(e){return e.id!=ed.id});S.income=S.income.filter(function(e){return e.id!=ed.id})}
+  addEntry(type,f);if(f.acc)adjAcc(f.acc,type==='inc'?f.a:-f.a);S.defaultAcc=f.acc||S.defaultAcc;editId=null;save();render()};
  var b;if(b=document.getElementById('ecancel'))b.onclick=function(){editId=null;render()};
- if(b=document.getElementById('edel'))b.onclick=function(){if(!confirm('Изтрий записа?'))return;S.expenses=S.expenses.filter(function(e){return e.id!=editId});S.income=S.income.filter(function(e){return e.id!=editId});editId=null;save();render()};
+ if(b=document.getElementById('edel'))b.onclick=function(){if(!confirm('Изтрий записа?'))return;var x=S.expenses.filter(function(e){return e.id==editId})[0]||S.income.filter(function(e){return e.id==editId})[0];if(x&&x.acc)adjAcc(x.acc,(S.expenses.some(function(e){return e.id==editId})?1:-1)*x.a);S.expenses=S.expenses.filter(function(e){return e.id!=editId});S.income=S.income.filter(function(e){return e.id!=editId});editId=null;save();render()};
  if(b=document.getElementById('erec'))b.onclick=function(){var f=formObj();if(!f)return;S.recurring.push({id:uid(),type:type,a:f.a,c:f.c,n:f.n});save();toast('Добавено в месечни');render()};
  bindAll('[data-rec]',function(id){var r=S.recurring.filter(function(x){return x.id==id})[0],m=monthOf(t),arr=r.type==='inc'?S.income:S.expenses,ex=arr.filter(function(e){return e.rec==r.id&&monthOf(e.d)===m})[0];
-  if(ex){if(confirm('Вече е записано този месец. Премахни?')){arr.splice(arr.indexOf(ex),1)}}else addEntry(r.type,{a:r.a,c:r.c,n:r.n,d:t,rec:r.id});save();render()});
+  if(ex){if(confirm('Вече е записано този месец. Премахни?')){arr.splice(arr.indexOf(ex),1)}}else{var acc=r.acc||S.defaultAcc;addEntry(r.type,{a:r.a,c:r.c,n:r.n,d:t,rec:r.id,acc:acc});adjAcc(acc,r.type==='inc'?r.a:-r.a)}save();render()});
  bindAll('[data-recdel]',function(id){if(confirm('Махни повтарящия се?')){S.recurring=S.recurring.filter(function(x){return x.id!=id});save();render()}});
- bindAll('[data-quick]',function(i){var e=qa[+i];addEntry('exp',{a:e.a,c:e.c,n:e.n,d:t});save();render()});
+ bindAll('[data-quick]',function(i){var e=qa[+i],acc=e.acc||S.defaultAcc;addEntry('exp',{a:e.a,c:e.c,n:e.n,d:t,acc:acc});adjAcc(acc,-e.a);save();render()});
  bindAll('[data-edit]',function(id){editId=id;render();scrollTo(0,0)});
  document.getElementById('mprev').onclick=function(){mMonth=shiftMonth(mMonth,-1);render()};document.getElementById('mnext').onclick=function(){mMonth=shiftMonth(mMonth,1);render()};
  bindAll('[data-dep]',function(id){var g=S.goals.filter(function(x){return x.id==id})[0],a=parseFloat((document.getElementById('gd'+id).value||'').replace(',','.'));if(!(a>0))return toast('Въведи сума');g.saved+=a;g.deps=g.deps||[];g.deps.push({d:t,a:a});addXp(10);toast(g.saved>=g.target?'🎉 Целта е постигната!':'🐷 +'+eur(a)+' · +10 XP');save();render()});
@@ -330,7 +405,8 @@ function rMoney(){migrateMoney();var t=todayKey(),wk=weekKey(new Date());mMonth=
  document.getElementById('catsave').onclick=function(){var c=document.getElementById('catsTxt').value.split(',').map(function(x){return x.trim()}).filter(Boolean);if(c.length){S.cats=c;save();toast('Категориите са запазени');render()}};
  document.getElementById('wadd').onclick=function(){var n=document.getElementById('wn').value,a=parseFloat(document.getElementById('wa').value)||0;if(!n)return;S.wishlist.push({id:uid(),n:n,a:a,t:Date.now()});save();render()};
  bindAll('[data-skip]',function(id){S.wishlist=S.wishlist.filter(function(e){return e.id!=id});addXp(20);toast('Спестено! +20 XP');save();render()});
- bindAll('[data-buy]',function(id){var w=S.wishlist.filter(function(e){return e.id==id})[0];addEntry('exp',{d:t,a:w.a,c:'Други',n:w.n});S.wishlist=S.wishlist.filter(function(e){return e.id!=id});save();render()})}
+ bindAll('[data-buy]',function(id){var w=S.wishlist.filter(function(e){return e.id==id})[0],acc=S.defaultAcc;addEntry('exp',{d:t,a:w.a,c:'Други',n:w.n,acc:acc});adjAcc(acc,-w.a);S.wishlist=S.wishlist.filter(function(e){return e.id!=id});save();render()});
+ moneyExtBind(t,mMonth)}
 function bindAll(sel,fn){Array.prototype.forEach.call(document.querySelectorAll(sel),function(b){b.onclick=function(){var k=Object.keys(b.dataset)[0];fn(b.dataset[k])}})}
 function rBoss(){var wk=weekKey(new Date()),bs=weekBosses(),done=S.bosses[wk]||{};
  var o='<div class="card"><h2>👹 Босове тази седмица</h2><div class="small">Нова двойка всеки понеделник. Неубит бос = −100 XP.</div>';
@@ -426,7 +502,12 @@ function buildReport(){var d=day(),T=tasks(),n=new Date(),total=T.reduce(functio
  r.push('Бюджет седмица: остават '+eur(S.budget-sw)+' от '+eur(S.budget));
  var w=S.weights[S.weights.length-1];r.push('Тегло: '+(w?w.kg.toFixed(1)+' кг ('+w.d+')':'няма'));
  var bd=S.bosses[wk]||{};r.push('Босове: '+weekBosses().map(function(b){return (bd[b.n]?'✅':'⏳')+' '+b.n}).join(', '));
- var fs=fitStats(),L2=S.wlog[t]||{sets:{}},P2=prog();r.push('','🏋️ Фитнес: '+P2.n+' – '+(L2.done?'✅ завършена':'❌ не е завършена'));P2.ex.forEach(function(e){r.push(' '+e.n+': '+(L2.sets[e.n]||0)+'/'+e.sets+' серии × '+e.reps+' '+e.u)});r.push('Тренировки: '+fs.w+' тази седм., '+fs.m+' този месец, серия '+fs.st);r.push('Хранене: цел '+S.kcal+' kcal, '+protein()+' г протеин · Цел тегло '+S.goal+' кг (сега '+lastKg()+')'+(gainRate()!=null?' · темпо '+gainRate().toFixed(2)+' кг/седм.':''));var CT=calFor(t);if(CT.length||calOverdue().length)r.push('Календар: '+CT.filter(function(x){return isDone(x,t)}).length+'/'+CT.length+' изпълнени'+(calOverdue().length?', просрочени '+calOverdue().length:'')+(shiftOf(t)?' · смяна '+shiftOf(t).from+'–'+shiftOf(t).to:''));CT.forEach(function(x){r.push(' '+(isDone(x,t)?'✅':'❌')+' '+(x.time||'')+' '+x.n)});var FD=foodDay(t);r.push('Храна: '+FD.k+'/'+S.kcal+' kcal, '+FD.p+'/'+protein()+' г протеин, '+FD.meals+'/6 записани хранения'+(FD.q?', качество '+FD.q.toFixed(1)+'/3':''));var MS=(migrateMoney(),monthSum(monthOf(t)));r.push('Месец '+monthOf(t)+': приходи '+eur(MS.I)+', разходи '+eur(MS.E)+', баланс '+eur(MS.B)+', спестяване '+MS.rate+'%');S.goals.forEach(function(g){r.push(' 🐷 '+g.n+': '+eur(g.saved)+'/'+eur(g.target))});var lm=S.meas[S.meas.length-1];if(lm)r.push('Мерки ('+lm.d+'): '+MEAS.map(function(m){return m[1]+' '+(lm[m[0]]!=null?lm[m[0]]:'–')}).join(', '));
+ var fs=fitStats(),L2=S.wlog[t]||{sets:{}},P2=prog();r.push('','🏋️ Фитнес: '+P2.n+' – '+(L2.done?'✅ завършена':'❌ не е завършена'));P2.ex.forEach(function(e){r.push(' '+e.n+': '+(L2.sets[e.n]||0)+'/'+e.sets+' серии × '+e.reps+' '+e.u)});r.push('Тренировки: '+fs.w+' тази седм., '+fs.m+' този месец, серия '+fs.st);r.push('Хранене: цел '+S.kcal+' kcal, '+protein()+' г протеин · Цел тегло '+S.goal+' кг (сега '+lastKg()+')'+(gainRate()!=null?' · темпо '+gainRate().toFixed(2)+' кг/седм.':''));var CT=calFor(t);if(CT.length||calOverdue().length)r.push('Календар: '+CT.filter(function(x){return isDone(x,t)}).length+'/'+CT.length+' изпълнени'+(calOverdue().length?', просрочени '+calOverdue().length:'')+(shiftOf(t)?' · смяна '+shiftOf(t).from+'–'+shiftOf(t).to:''));CT.forEach(function(x){r.push(' '+(isDone(x,t)?'✅':'❌')+' '+(x.time||'')+' '+x.n)});var FD=foodDay(t);r.push('Храна: '+FD.k+'/'+S.kcal+' kcal, '+FD.p+'/'+protein()+' г протеин, '+FD.meals+'/6 записани хранения'+(FD.q?', качество '+FD.q.toFixed(1)+'/3':''));ensureMoney();var MS=(migrateMoney(),monthSum(monthOf(t)));r.push('Месец '+monthOf(t)+': приходи '+eur(MS.I)+', разходи '+eur(MS.E)+', баланс '+eur(MS.B)+', спестяване '+MS.rate+'%');
+ r.push('Сметки: '+S.accounts.map(function(a){return a.n+' '+eur(a.bal)}).join(', ')+' (общо '+eur(S.accounts.reduce(function(s,a){return s+a.bal},0))+')');
+ var bm=S.bills.filter(function(b){return !billPaid(b,monthOf(t))});if(S.bills.length)r.push('Сметки за плащане: '+bm.length+' неплатени · '+eur(bm.reduce(function(a,b){return a+b.a},0))+(S.bills.some(function(b){return billOverdue(b,monthOf(t))})?' ⚠️ просрочени':''));
+ var cn=campMonth(monthOf(t));if(cn.length)r.push('Къмпинг: '+cn.length+' нощи · '+eur(cn.reduce(function(a,n){return a+n.a},0)));
+ var nm=nextMonth(),pl=planMonth(nm);if(pl.length)r.push('План '+nm+': '+pl.length+' т. · '+eur(pl.reduce(function(a,p){return a+p.a},0)));
+ S.goals.forEach(function(g){r.push(' 🐷 '+g.n+': '+eur(g.saved)+'/'+eur(g.target))});var lm=S.meas[S.meas.length-1];if(lm)r.push('Мерки ('+lm.d+'): '+MEAS.map(function(m){return m[1]+' '+(lm[m[0]]!=null?lm[m[0]]:'–')}).join(', '));
  r.push('','Рефлексия: '+((d.refl||'').trim()||'—'));return r.join('\n')}
 function showReport(){var txt=buildReport(),box=document.getElementById('repbox');
  box.innerHTML='<div class="card"><h2>📟 Доклад</h2><textarea id="reptxt" style="min-height:260px;font-size:14px" readonly></textarea><div class="row"><button class="btn sec" id="repcopy">📋 Копирай</button>'+((navigator.share||(AND&&AND.share))?'<button class="btn" id="repshare">📤 Сподели</button>':'')+'<button class="btn sec" id="repclose">✕</button></div></div>';
@@ -686,7 +767,7 @@ if(!S.meas.length){S.meas=[{d:todayKey(),kg:70}];S.weights=[{d:todayKey(),kg:70}
 // ---------- Sync layer (transport-agnostic; Supabase adapter plugs in via SistemaSync) ----------
 // Every logical record has a path (e.g. "days/2026-10-15", "expenses/123", "core"), its own updatedAt, and tombstones on delete.
 var SYNC_KEY='sistema_sync',COLL={days:'map',wlog:'map',food:'map',bosses:'map',shop:'map',shifts:'map',oplan:'map',catBudget:'map',foods:'map',owned:'map',
- expenses:'id',income:'id',cal:'id',goals:'id',recurring:'id',clothes:'id',outfits:'id',wishlist:'id',meas:'d',weights:'d',prs:'dev'},LOCAL_ONLY={_penalty:1,focus:1,mission:1,maxLvl:1};
+ expenses:'id',income:'id',cal:'id',goals:'id',recurring:'id',clothes:'id',outfits:'id',wishlist:'id',meas:'d',weights:'d',prs:'dev',bills:'id',campNights:'id',plans:'id',accounts:'id'},LOCAL_ONLY={_penalty:1,focus:1,mission:1,maxLvl:1};
 function recKey(c,x){var m=COLL[c];return m==='id'?String(x.id):m==='d'?x.d:m==='dev'?x.d+'|'+x.ex+'|'+x.v:null}
 function syncRecords(st){var o={},core={};for(var k in st){if(COLL[k]){var c=st[k]||(COLL[k]==='map'?{}:[]);if(COLL[k]==='map'){for(var mk in c)o[k+'/'+mk]=c[mk]}else c.forEach(function(x){o[k+'/'+recKey(k,x)]=x})}else if(!LOCAL_ONLY[k])core[k]=st[k]}o.core=core;return o}
 function hashStr(s){var h=5381,i=s.length;while(i)h=(h*33)^s.charCodeAt(--i);return (h>>>0).toString(36)+s.length}
@@ -783,7 +864,8 @@ function cloudBind(){var $=function(x){return document.getElementById(x)},b;
 
 function migrate(){var v=S.schemaVersion||1;if(v<3){S.heroName=S.heroName||'';S.coins=S.coins||0;
  (S.clothes||[]).forEach(function(c){if(!c.color&&c.img){var im=new Image();im.onload=function(){var cv=document.createElement('canvas');cv.width=im.width;cv.height=im.height;cv.getContext('2d').drawImage(im,0,0);c.color=avgColor(cv);save()};im.src=c.img}})}
- S.schemaVersion=3;save()}
+ if(v<4){ensureMoney()}
+ S.schemaVersion=4;save()}
 migrate();syncTrack();cloudFromHash();if(authGet())cloudStart(false);else cloud.firstDone=true;setTimeout(function(){if(!cloud.firstDone){cloud.firstDone=true;tick()}},8000);
 tick();
 document.addEventListener('visibilitychange',function(){if(!document.hidden)tick()});
